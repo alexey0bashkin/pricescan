@@ -1,0 +1,196 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PriceScan — калькулятор цены за грамм</title>
+    <meta name="description" content="Сравнивайте цены в магазине, сканируйте ценники, контролируйте бюджет и экономьте деньги">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/x-icon" href="icons/favicon.ico">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4A6CF7">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- ШАПКА -->
+    <header class="header">
+        <div class="header-left">
+            <span class="logo" id="logoLink">🛒 PriceScan</span>
+        </div>
+        <div class="header-center" id="budgetDisplay">
+            <span class="budget-label">💰 Бюджет:</span>
+            <input type="number" id="budgetInput" class="budget-input" value="0" step="10" min="0">
+            <span class="currency-sign">₽</span>
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+            </div>
+            <span class="budget-status" id="budgetStatus">💰</span>
+        </div>
+        <div class="header-right">
+            <button id="themeToggle" class="theme-btn" aria-label="Переключить тему">🌙</button>
+        </div>
+    </header>
+
+    <!-- ОСНОВНОЙ КОНТЕЙНЕР -->
+    <main class="container">
+
+        <!-- Вкладки режимов -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="manual">✏️ Ручной ввод</button>
+            <button class="tab-btn" data-tab="camera">📷 Камера</button>
+            <button class="tab-btn" data-tab="voice">🎙️ Голос</button>
+        </div>
+
+        <!-- РУЧНОЙ РЕЖИМ -->
+        <section id="manualTab" class="tab-content active">
+            <div class="card">
+                <div class="form-group">
+                    <label for="productName">Название товара</label>
+                    <input type="text" id="productName" placeholder="Например: Сыр Российский" class="form-input">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="priceInput">Цена (₽)</label>
+                        <input type="number" id="priceInput" placeholder="299.90" class="form-input" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="weightInput">Вес (г)</label>
+                        <input type="number" id="weightInput" placeholder="500" class="form-input" step="0.1" min="0.1">
+                    </div>
+                </div>
+                <button id="clearBtn" class="btn btn-secondary">🔄 Очистить поля</button>
+            </div>
+        </section>
+
+        <!-- РЕЖИМ КАМЕРЫ -->
+        <section id="cameraTab" class="tab-content">
+            <div class="card">
+                <div class="camera-container">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas" style="display:none;"></canvas>
+                    <div class="camera-overlay">
+                        <div class="scan-frame"></div>
+                    </div>
+                    <button id="captureBtn" class="btn btn-primary capture-btn">📸 Сделать снимок</button>
+                </div>
+                <div id="ocrStatus" class="ocr-status">Наведите камеру на ценник</div>
+                <button id="startCameraBtn" class="btn btn-primary">📷 Включить камеру</button>
+            </div>
+        </section>
+
+        <!-- ГОЛОСОВОЙ РЕЖИМ -->
+        <section id="voiceTab" class="tab-content">
+            <div class="card">
+                <button id="voiceBtn" class="btn btn-primary voice-btn">🎙️ Начать запись</button>
+                <div id="voiceStatus" class="voice-status">Нажмите кнопку и скажите: "Молоко 150 рублей 500 грамм"</div>
+                <div id="voiceResult" class="voice-result"></div>
+            </div>
+        </section>
+
+        <!-- РЕЗУЛЬТАТЫ -->
+        <section class="results-section" id="resultsSection" style="display:none;">
+            <div class="card results-card">
+                <h3>📊 Результаты</h3>
+                <div class="result-grid">
+                    <div class="result-item">
+                        <span class="result-label">Цена за 1г</span>
+                        <span class="result-value" id="pricePerGram">0.00 ₽</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Цена за 100г</span>
+                        <span class="result-value" id="pricePer100g">0.00 ₽</span>
+                    </div>
+                    <div class="result-item highlight">
+                        <span class="result-label">⭐ Цена за 1кг</span>
+                        <span class="result-value" id="pricePerKg">0.00 ₽</span>
+                    </div>
+                </div>
+
+                <!-- Блок акции -->
+                <div id="saleBlock" class="sale-block" style="display:none;">
+                    <div class="sale-content">
+                        <span class="sale-icon">🏷️</span>
+                        <div>
+                            <div class="sale-title">АКЦИЯ!</div>
+                            <div class="sale-prices">
+                                <span class="old-price" id="oldPriceDisplay">0 ₽</span>
+                                <span class="arrow">→</span>
+                                <span class="new-price" id="newPriceDisplay">0 ₽</span>
+                            </div>
+                            <div class="sale-savings">💰 Экономия: <span id="savingsAmount">0</span>₽ (<span id="discountPercent">0</span>%)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Кнопки действий -->
+                <div class="action-buttons">
+                    <button id="addToHistoryBtn" class="btn btn-success">➕ Добавить в сравнение</button>
+                    <button id="shareBtn" class="btn btn-secondary">📤 Поделиться</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- СЛАЙДЕР КОЛИЧЕСТВА -->
+        <section class="quantity-section" style="display:none;" id="quantitySection">
+            <div class="card">
+                <label for="quantitySlider">📦 Количество: <span id="quantityDisplay">1</span> шт.</label>
+                <input type="range" id="quantitySlider" min="1" max="20" value="1" step="1">
+                <div class="total-price">Итого: <span id="totalPrice">0.00</span> ₽</div>
+            </div>
+        </section>
+
+        <!-- КАЛЬКУЛЯТОР ГОДНОСТИ -->
+        <section class="expiry-section" id="expirySection">
+            <div class="card">
+                <h3>📅 Срок годности</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="expiryDate">📅 Дата производства</label>
+                        <input type="date" id="expiryDate" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="expiryDays">⏳ Срок годности (дней)</label>
+                        <input type="number" id="expiryDays" placeholder="7" class="form-input" min="1">
+                    </div>
+                </div>
+                <div id="expiryResult" class="expiry-result">
+                    Введите дату и срок годности для расчёта
+                </div>
+                <button id="applyRecommendedBtn" class="btn btn-primary" style="display:none;">📦 Взять рекомендованный вес</button>
+            </div>
+        </section>
+
+        <!-- ИСТОРИЯ -->
+        <section class="history-section">
+            <div class="card">
+                <div class="history-header">
+                    <h3>📋 История сравнений</h3>
+                    <div class="history-actions">
+                        <button id="clearHistoryBtn" class="btn btn-sm btn-danger">🗑️ Очистить всё</button>
+                    </div>
+                </div>
+                <div id="historyList" class="history-list">
+                    <div class="empty-history">🛒 Добавьте первый товар для сравнения</div>
+                </div>
+                <div class="history-summary" id="historySummary" style="display:none;">
+                    <span>Всего товаров: <strong id="totalItems">0</strong></span>
+                    <span>Общая экономия: <strong id="totalSavings">0</strong> ₽</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ФУТЕР -->
+    <footer class="footer">
+        <p>🛒 PriceScan — экономьте с умом</p>
+        <p class="footer-small">Все данные хранятся локально на вашем устройстве</p>
+    </footer>
+
+    <!-- Подключаем библиотеки -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+    <!-- Наш скрипт -->
+    <script src="script.js"></script>
+</body>
+</html>
