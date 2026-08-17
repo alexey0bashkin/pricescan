@@ -916,3 +916,115 @@ body {
     min-height: 52px;
     display: none;
 }
+
+/* ===== НОВЫЕ СТИЛИ ДЛЯ КАМЕРЫ ===== */
+
+/* Контролы камеры */
+.camera-controls {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.camera-controls .cam-btn {
+    pointer-events: all;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all 0.3s ease;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-controls .cam-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+.camera-controls .cam-btn:active {
+    transform: scale(0.9);
+}
+
+/* Кнопка фонарика активна */
+.camera-controls .cam-btn.torch-active {
+    background: rgba(255, 255, 0, 0.3);
+    border-color: #FFD700;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+/* Кнопка "Сделать снимок" */
+.capture-btn {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    transform: none;
+    margin: 10px auto;
+    padding: 12px 30px;
+    background: var(--primary);
+    color: white;
+    font-weight: 700;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+    min-height: 52px;
+    display: none;
+    width: 100%;
+    max-width: 300px;
+}
+
+/* Кнопка сканирования штрихкода */
+#scanBarcodeBtn {
+    margin-top: 8px;
+    width: 100%;
+    max-width: 300px;
+}
+
+/* Стиль для статуса OCR */
+.ocr-status {
+    text-align: center;
+    padding: 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-top: 10px;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Адаптация для мобильных */
+@media (max-width: 600px) {
+    .camera-controls {
+        bottom: 70px;
+        gap: 10px;
+    }
+    
+    .camera-controls .cam-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 20px;
+    }
+    
+    .capture-btn {
+        max-width: 100%;
+        margin: 8px auto;
+    }
+    
+    #scanBarcodeBtn {
+        max-width: 100%;
+    }
+}
