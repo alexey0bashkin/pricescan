@@ -1,6 +1,6 @@
 /**
  * PriceScan — Главный скрипт
- * Все функции: ручной ввод, OCR, бюджет, годность, история
+ * Все функции: ручной ввод, OCR, бюджет, годность, история, сканер штрихкода
  */
 
 // ============================================================
@@ -14,6 +14,9 @@ let isOnSale = false;
 let saleData = null;
 let history = [];
 let budgetData = { dailyBudget: 0, todaySpent: 0, lastReset: '' };
+let cameraStream = null;
+let isTorchOn = false;
+let barcodeReader = null;
 
 // DOM элементы
 const DOM = {};
@@ -22,7 +25,7 @@ const DOM = {};
 // 2. ИНИЦИАЛИЗАЦИЯ
 // ============================================================
 
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function() {
     // Загружаем все DOM элементы
     DOM.priceInput = document.getElementById('priceInput');
     DOM.weightInput = document.getElementById('weightInput');
@@ -65,15 +68,19 @@ document.addEventListener('DOMContentLoaded', function () {
     DOM.resultsSection = document.getElementById('resultsSection');
     DOM.quantitySection = document.getElementById('quantitySection');
     DOM.logoLink = document.getElementById('logoLink');
+    DOM.torchBtn = document.getElementById('torchBtn');
+    DOM.uploadBtn = document.getElementById('uploadBtn');
+    DOM.fileInput = document.getElementById('fileInput');
+    DOM.scanBarcodeBtn = document.getElementById('scanBarcodeBtn');
 
-    // Устанавливаем сегодняшнюю дату в поле даты
+    // Устанавливаем сегодняшнюю дату
     const today = new Date().toISOString().split('T')[0];
     DOM.expiryDate.value = today;
 
-    // Загружаем данные из localStorage
+    // Загружаем данные
     loadFromStorage();
 
-    // Настройка обработчиков событий
+    // Настройка обработчиков
     setupEventListeners();
 
     // Применяем тему
@@ -82,6 +89,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Обновляем интерфейс
     updateBudgetUI();
     updateHistoryUI();
+
+    // Инициализируем сканер штрихкода
+    initBarcodeScanner();
 });
 
 // ============================================================
@@ -217,7 +227,7 @@ function updateQuantity() {
 }
 
 // ============================================================
-// 6. КАЛЬКУЛЯТОР ГОДНОСТИ (БЕЗ ГРАММОВ В ДЕНЬ)
+// 6. КАЛЬКУЛЯТОР ГОДНОСТИ
 // ============================================================
 
 function checkExpiry() {
@@ -253,7 +263,6 @@ function checkExpiry() {
         html += `<strong>📅 Годен до:</strong> ${expiryDateObj.toLocaleDateString()}<br>`;
         html += `<strong>⏳ Осталось дней:</strong> ${daysLeft} дн.`;
 
-        // Проверяем вес только если он есть
         if (currentWeight > 0) {
             const dailyConsumption = 100;
             const maxCanEat = daysLeft * dailyConsumption;
@@ -285,7 +294,7 @@ function checkExpiry() {
                 DOM.applyRecommendedBtn.style.display = 'none';
             }
         } else {
-            html += `<br><span style="color: var(--text-secondary);">ℹ️ Добавьте вес товара для расчёта, успеете ли съесть</span>`;
+            html += `<br><span style="color: var(--text-secondary);">ℹ️ Добавьте вес товара для расчёта</span>`;
             DOM.applyRecommendedBtn.style.display = 'none';
         }
     }
@@ -449,7 +458,6 @@ function updateHistoryUI() {
 
     list.innerHTML = html;
 
-    // Добавляем кнопку "Поделиться" в историю
     const shareHistoryBtn = document.createElement('button');
     shareHistoryBtn.className = 'btn btn-secondary mt-10';
     shareHistoryBtn.textContent = '📤 Поделиться историей';
@@ -458,7 +466,7 @@ function updateHistoryUI() {
     list.appendChild(shareHistoryBtn);
 
     document.querySelectorAll('.history-delete').forEach(btn => {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', function() {
             const id = this.dataset.id;
             history = history.filter(item => item.id !== id);
             saveHistory();
@@ -507,7 +515,7 @@ function shareHistory() {
         navigator.share({
             title: 'PriceScan - мои сравнения цен',
             text: text
-        }).catch(() => { });
+        }).catch(() => {});
     } else {
         navigator.clipboard.writeText(text).then(() => {
             alert('✅ История скопирована в буфер обмена!\n\n' + text);
@@ -518,7 +526,7 @@ function shareHistory() {
 }
 
 // ============================================================
-// 9. ФУНКЦИЯ "ПОДЕЛИТЬСЯ" (для одного товара)
+// 9. ФУНКЦИЯ "ПОДЕЛИТЬСЯ"
 // ============================================================
 
 function shareResult() {
@@ -548,7 +556,7 @@ function shareResult() {
         navigator.share({
             title: 'PriceScan - сравнение цен',
             text: text
-        }).catch(() => { });
+        }).catch(() => {});
     } else {
         navigator.clipboard.writeText(text).then(() => {
             alert('✅ Данные скопированы в буфер обмена!\n\n' + text);
@@ -562,11 +570,20 @@ function shareResult() {
 }
 
 // ============================================================
-// 10. OCR (СКАНИРОВАНИЕ ЦЕННИКОВ)
+// 10. КАМЕРА + OCR + ШТРИХКОД
 // ============================================================
 
-let cameraStream = null;
+// 10.1. Инициализация сканера штрихкода
+function initBarcodeScanner() {
+    try {
+        barcodeReader = new ZXing.BrowserMultiFormatReader();
+        console.log('✅ Сканер штрихкода инициализирован');
+    } catch (e) {
+        console.warn('⚠️ Ошибка инициализации сканера:', e);
+    }
+}
 
+// 10.2. Запуск камеры
 async function startCamera() {
     try {
         DOM.ocrStatus.textContent = '📷 Запрос доступа к камере...';
@@ -578,19 +595,23 @@ async function startCamera() {
         DOM.video.srcObject = stream;
         await DOM.video.play();
 
-        DOM.ocrStatus.textContent = '📸 Наведите на ценник и нажмите "Сделать снимок"';
+        DOM.ocrStatus.textContent = '📸 Наведите на ценник или штрихкод';
         DOM.startCameraBtn.textContent = '🔄 Перезапустить камеру';
         DOM.captureBtn.style.display = 'block';
+        DOM.scanBarcodeBtn.style.display = 'inline-block';
+        DOM.torchBtn.style.display = 'inline-block';
+        DOM.uploadBtn.style.display = 'inline-block';
     } catch (err) {
         console.error('Ошибка камеры:', err);
-        DOM.ocrStatus.textContent = '❌ Не удалось получить доступ к камере. Используйте ручной ввод.';
+        DOM.ocrStatus.textContent = '❌ Не удалось получить доступ к камере. Используйте загрузку фото.';
         DOM.startCameraBtn.textContent = '📷 Попробовать снова';
     }
 }
 
+// 10.3. Сделать снимок (OCR)
 function captureAndScan() {
     if (!cameraStream) {
-        alert('Сначала включите камеру');
+        alert('Сначала включите камеру или загрузите фото');
         return;
     }
 
@@ -604,7 +625,7 @@ function captureAndScan() {
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Предобработка
+    // Предобработка для OCR
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
@@ -631,7 +652,6 @@ function captureAndScan() {
     ).then(({ data: { text } }) => {
         DOM.ocrStatus.textContent = '✅ Распознано!';
         parseOCRText(text);
-        // Переключаемся на ручной ввод после распознавания
         switchTab('manual');
     }).catch((err) => {
         console.error('OCR ошибка:', err);
@@ -639,30 +659,25 @@ function captureAndScan() {
     });
 }
 
+// 10.4. Парсинг OCR текста
 function parseOCRText(text) {
     console.log('Распознанный текст:', text);
 
-    // Поиск названия товара
     const lines = text.split('\n').filter(line => line.trim().length > 0);
-    let foundName = false;
     for (const line of lines) {
         const clean = line.trim();
         if (clean.length > 2 && !/\d/.test(clean) && clean.length < 30) {
             DOM.productName.value = clean;
-            foundName = true;
             break;
         }
     }
 
-    // Поиск цены
     const priceRegex = /(\d+[\.,]?\d*)\s*(?:₽|руб|р\.|rub)/i;
     const priceMatch = text.match(priceRegex);
 
-    // Поиск веса
     const weightRegex = /(\d+[\.,]?\d*)\s*(?:г|гр|грамм|кг|килограмм)/i;
     const weightMatch = text.match(weightRegex);
 
-    // Поиск акции
     const saleRegex = /(?:акция|скидка|sale)/i;
     const isSale = saleRegex.test(text);
 
@@ -689,21 +704,15 @@ function parseOCRText(text) {
     if (priceMatch) {
         let price = parseFloat(priceMatch[1].replace(',', '.'));
         if (price > 0) DOM.priceInput.value = price;
-    } else {
-        DOM.ocrStatus.textContent = '⚠️ Не найдена цена. Введите вручную.';
     }
 
     if (weightMatch) {
         let weight = parseFloat(weightMatch[1].replace(',', '.'));
         if (weight > 0) {
             const isKg = /кг|килограмм/i.test(weightMatch[0]);
-            if (isKg) {
-                weight = weight * 1000;
-            }
+            if (isKg) weight = weight * 1000;
             DOM.weightInput.value = weight;
         }
-    } else {
-        DOM.ocrStatus.textContent = '⚠️ Не найден вес. Введите вручную.';
     }
 
     if (isSaleDetected && oldPrice && newPrice) {
@@ -719,7 +728,7 @@ function parseOCRText(text) {
     calculate();
 
     if (priceMatch && weightMatch) {
-        DOM.ocrStatus.textContent = '✅ Ценник распознан! Проверьте данные и нажмите "Добавить"';
+        DOM.ocrStatus.textContent = '✅ Ценник распознан! Проверьте данные';
         DOM.ocrStatus.style.color = '#22C55E';
     } else {
         DOM.ocrStatus.textContent = '⚠️ Частичное распознавание. Проверьте поля вручную.';
@@ -727,6 +736,165 @@ function parseOCRText(text) {
     }
 }
 
+// 10.5. Сканирование штрихкода
+async function scanBarcode() {
+    if (!cameraStream) {
+        alert('Сначала включите камеру');
+        return;
+    }
+
+    DOM.ocrStatus.textContent = '📊 Сканируем штрихкод...';
+
+    try {
+        const result = await barcodeReader.decodeFromVideoElement(DOM.video);
+        const barcode = result.getText();
+        console.log('Штрихкод:', barcode);
+        
+        DOM.ocrStatus.textContent = `✅ Найден штрихкод: ${barcode}`;
+        DOM.ocrStatus.style.color = '#22C55E';
+        
+        // Ищем товар по штрихкоду
+        await searchProductByBarcode(barcode);
+        
+    } catch (err) {
+        console.error('Ошибка сканирования:', err);
+        DOM.ocrStatus.textContent = '❌ Не удалось распознать штрихкод. Попробуйте снова.';
+        DOM.ocrStatus.style.color = '#EF4444';
+    }
+}
+
+// 10.6. Поиск товара по штрихкоду (Роскачество + Open Food Facts)
+async function searchProductByBarcode(barcode) {
+    DOM.ocrStatus.textContent = '🔍 Ищем товар...';
+    
+    let product = null;
+    
+    // 1. Пробуем Роскачество
+    try {
+        const response = await fetch(`https://roscontrol.com/api/search?barcode=${barcode}`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.name) {
+                product = data;
+                DOM.ocrStatus.textContent = `✅ Найдено через Роскачество: ${product.name}`;
+            }
+        }
+    } catch (e) {
+        console.warn('Роскачество не отвечает');
+    }
+    
+    // 2. Пробуем Open Food Facts
+    if (!product) {
+        try {
+            const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.product) {
+                    product = {
+                        name: data.product.product_name_ru || data.product.product_name || 'Товар',
+                        brand: data.product.brands || '',
+                        weight: data.product.quantity ? parseFloat(data.product.quantity) : null
+                    };
+                    DOM.ocrStatus.textContent = `✅ Найдено через Open Food Facts: ${product.name}`;
+                }
+            }
+        } catch (e) {
+            console.warn('Open Food Facts не отвечает');
+        }
+    }
+    
+    // 3. Если нашли - заполняем поля
+    if (product) {
+        if (product.name) DOM.productName.value = product.name;
+        if (product.brand && !DOM.productName.value) DOM.productName.value = product.brand;
+        if (product.weight) DOM.weightInput.value = product.weight;
+        
+        DOM.ocrStatus.textContent = `✅ Товар найден: ${DOM.productName.value}. Введите цену.`;
+        DOM.ocrStatus.style.color = '#22C55E';
+        switchTab('manual');
+    } else {
+        DOM.ocrStatus.textContent = `❌ Товар по штрихкоду ${barcode} не найден. Введите вручную.`;
+        DOM.ocrStatus.style.color = '#EAB308';
+        // Переключаемся на ручной ввод
+        switchTab('manual');
+    }
+}
+
+// 10.7. Фонарик
+function toggleTorch() {
+    if (!cameraStream) {
+        alert('Сначала включите камеру');
+        return;
+    }
+    
+    isTorchOn = !isTorchOn;
+    const track = cameraStream.getVideoTracks()[0];
+    if (track) {
+        try {
+            track.applyConstraints({
+                advanced: [{ torch: isTorchOn }]
+            });
+            DOM.torchBtn.textContent = isTorchOn ? '🔦' : '🔦';
+            DOM.torchBtn.style.background = isTorchOn ? 'rgba(255,255,0,0.3)' : 'rgba(255,255,255,0.2)';
+        } catch (e) {
+            console.warn('Фонарик не поддерживается');
+            alert('Фонарик не поддерживается на этом устройстве');
+            isTorchOn = false;
+        }
+    }
+}
+
+// 10.8. Загрузка фото
+function uploadPhoto() {
+    DOM.fileInput.click();
+}
+
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            // Рисуем на canvas для OCR
+            const canvas = DOM.canvas;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            
+            DOM.ocrStatus.textContent = '🔄 Распознаём загруженное фото...';
+            
+            // OCR с загруженного фото
+            Tesseract.recognize(
+                canvas,
+                'rus+eng',
+                {
+                    logger: (m) => {
+                        if (m.status === 'recognizing text') {
+                            DOM.ocrStatus.textContent = `🔄 Распознавание: ${Math.round(m.progress * 100)}%`;
+                        }
+                    }
+                }
+            ).then(({ data: { text } }) => {
+                DOM.ocrStatus.textContent = '✅ Распознано с фото!';
+                parseOCRText(text);
+                switchTab('manual');
+            }).catch((err) => {
+                console.error('OCR ошибка:', err);
+                DOM.ocrStatus.textContent = '❌ Ошибка распознавания. Введите вручную.';
+            });
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    
+    // Сбрасываем input
+    DOM.fileInput.value = '';
+}
+
+// 10.9. Блок акции
 function showSaleBlock(oldPrice, newPrice, discount) {
     DOM.saleBlock.style.display = 'block';
     DOM.oldPriceDisplay.textContent = `${oldPrice.toFixed(2)} ₽`;
@@ -743,7 +911,7 @@ let isListening = false;
 
 function startVoiceRecognition() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        DOM.voiceStatus.textContent = '❌ Голосовой ввод не поддерживается в этом браузере';
+        DOM.voiceStatus.textContent = '❌ Голосовой ввод не поддерживается';
         return;
     }
 
@@ -760,18 +928,18 @@ function startVoiceRecognition() {
     recognition.continuous = false;
     recognition.interimResults = false;
 
-    DOM.voiceStatus.textContent = '🎤 Слушаю... Говорите: "Название, цена, вес"';
+    DOM.voiceStatus.textContent = '🎤 Слушаю...';
     DOM.voiceBtn.textContent = '⏹️ Остановить';
     isListening = true;
 
-    recognition.onresult = function (event) {
+    recognition.onresult = function(event) {
         const transcript = event.results[0][0].transcript.toLowerCase();
         DOM.voiceResult.textContent = `📝 Распознано: "${transcript}"`;
         DOM.voiceStatus.textContent = '✅ Обработка...';
 
         const numbers = transcript.match(/\d+[\.,]?\d*/g);
         if (!numbers || numbers.length < 2) {
-            DOM.voiceStatus.textContent = '⚠️ Не найдены цена и вес. Скажите например: "Молоко 150 рублей 500 грамм"';
+            DOM.voiceStatus.textContent = '⚠️ Не найдены цена и вес. Пример: "Молоко 150 рублей 500 грамм"';
             DOM.voiceBtn.textContent = '🎙️ Начать запись';
             isListening = false;
             return;
@@ -805,47 +973,30 @@ function startVoiceRecognition() {
         if (price === null && numbers.length >= 2) {
             price = parseFloat(numbers[0].replace(',', '.'));
             weight = parseFloat(numbers[1].replace(',', '.'));
-
             if (transcript.includes('кг') || transcript.includes('килограмм')) {
                 weight = weight * 1000;
             }
         }
 
-        if (price && price > 0) {
-            DOM.priceInput.value = price;
-        } else {
-            DOM.voiceStatus.textContent = '⚠️ Не найдена цена. Попробуйте ещё раз.';
-            DOM.voiceBtn.textContent = '🎙️ Начать запись';
-            isListening = false;
-            return;
-        }
-
-        if (weight && weight > 0) {
-            DOM.weightInput.value = weight;
-        } else {
-            DOM.voiceStatus.textContent = '⚠️ Не найден вес. Попробуйте ещё раз.';
-            DOM.voiceBtn.textContent = '🎙️ Начать запись';
-            isListening = false;
-            return;
-        }
+        if (price && price > 0) DOM.priceInput.value = price;
+        if (weight && weight > 0) DOM.weightInput.value = weight;
 
         DOM.voiceStatus.textContent = '✅ Данные вставлены! Проверьте и нажмите "Добавить"';
         DOM.voiceBtn.textContent = '🎙️ Начать запись';
         isListening = false;
         calculate();
-        // Переключаемся на ручной ввод после распознавания
         switchTab('manual');
     };
 
-    recognition.onerror = function (event) {
+    recognition.onerror = function(event) {
         DOM.voiceStatus.textContent = `❌ Ошибка: ${event.error}`;
         DOM.voiceBtn.textContent = '🎙️ Начать запись';
         isListening = false;
     };
 
-    recognition.onend = function () {
+    recognition.onend = function() {
         DOM.voiceBtn.textContent = '🎙️ Начать запись';
-        if (DOM.voiceStatus.textContent === '🎤 Слушаю... Говорите: "Название, цена, вес"') {
+        if (DOM.voiceStatus.textContent === '🎤 Слушаю...') {
             DOM.voiceStatus.textContent = '⏹️ Запись завершена';
         }
         isListening = false;
@@ -887,12 +1038,12 @@ function switchTab(tabName) {
 }
 
 // ============================================================
-// 14. НАСТРОЙКА ОБРАБОТЧИКОВ СОБЫТИЙ
+// 14. НАСТРОЙКА ОБРАБОТЧИКОВ
 // ============================================================
 
 function setupEventListeners() {
-    // --- Обновление страницы по клику на логотип ---
-    DOM.logoLink.addEventListener('click', function () {
+    // --- Логотип ---
+    DOM.logoLink.addEventListener('click', function() {
         location.reload();
     });
 
@@ -902,7 +1053,7 @@ function setupEventListeners() {
     DOM.productName.addEventListener('input', calculate);
 
     // --- Бюджет ---
-    DOM.budgetInput.addEventListener('change', function () {
+    DOM.budgetInput.addEventListener('change', function() {
         const val = parseFloat(this.value) || 0;
         budgetData.dailyBudget = val;
         if (budgetData.todaySpent > val) {
@@ -921,7 +1072,7 @@ function setupEventListeners() {
     DOM.expiryDays.addEventListener('input', checkExpiry);
 
     // --- Применить рекомендованный вес ---
-    DOM.applyRecommendedBtn.addEventListener('click', function () {
+    DOM.applyRecommendedBtn.addEventListener('click', function() {
         const weight = parseFloat(this.dataset.weight);
         const price = parseFloat(this.dataset.price);
         if (weight && price) {
@@ -942,7 +1093,7 @@ function setupEventListeners() {
     DOM.shareBtn.addEventListener('click', shareResult);
 
     // --- Камера ---
-    DOM.startCameraBtn.addEventListener('click', function () {
+    DOM.startCameraBtn.addEventListener('click', function() {
         if (cameraStream) {
             cameraStream.getTracks().forEach(track => track.stop());
             cameraStream = null;
@@ -950,9 +1101,13 @@ function setupEventListeners() {
         startCamera();
     });
     DOM.captureBtn.addEventListener('click', captureAndScan);
+    DOM.scanBarcodeBtn.addEventListener('click', scanBarcode);
+    DOM.torchBtn.addEventListener('click', toggleTorch);
+    DOM.uploadBtn.addEventListener('click', uploadPhoto);
+    DOM.fileInput.addEventListener('change', handleFileUpload);
 
-    // --- Очистка (полная) ---
-    DOM.clearBtn.addEventListener('click', function () {
+    // --- Очистка ---
+    DOM.clearBtn.addEventListener('click', function() {
         DOM.priceInput.value = '';
         DOM.weightInput.value = '';
         DOM.productName.value = '';
@@ -977,7 +1132,7 @@ function setupEventListeners() {
 
     // --- Вкладки ---
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', function() {
             switchTab(this.dataset.tab);
         });
     });
@@ -985,28 +1140,30 @@ function setupEventListeners() {
     // --- Голос ---
     DOM.voiceBtn.addEventListener('click', startVoiceRecognition);
 
-    // --- Скрыть камеру при переключении вкладки ---
+    // --- Скрыть камеру ---
     document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', function() {
             if (this.dataset.tab !== 'camera' && cameraStream) {
                 cameraStream.getTracks().forEach(track => track.stop());
                 cameraStream = null;
                 DOM.startCameraBtn.textContent = '📷 Включить камеру';
                 DOM.ocrStatus.textContent = 'Камера отключена';
                 DOM.captureBtn.style.display = 'none';
+                DOM.scanBarcodeBtn.style.display = 'none';
+                DOM.torchBtn.style.display = 'none';
+                DOM.uploadBtn.style.display = 'none';
             }
         });
     });
 
     // --- Горячие клавиши ---
-    document.addEventListener('keydown', function (e) {
+    document.addEventListener('keydown', function(e) {
         if (e.ctrlKey && e.key === 'Enter') {
             e.preventDefault();
             DOM.addToHistoryBtn.click();
         }
     });
 
-    // Первоначальный расчёт
     if (DOM.priceInput.value && DOM.weightInput.value) {
         calculate();
     }
