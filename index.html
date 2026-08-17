@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -62,19 +62,25 @@
             </div>
         </section>
 
-        <!-- РЕЖИМ КАМЕРЫ -->
+        <!-- РЕЖИМ КАМЕРЫ (НОВЫЙ ДИЗАЙН) -->
         <section id="cameraTab" class="tab-content">
-            <div class="card">
+            <div class="card camera-card">
                 <div class="camera-container">
                     <video id="video" autoplay playsinline></video>
                     <canvas id="canvas" style="display:none;"></canvas>
                     <div class="camera-overlay">
                         <div class="scan-frame"></div>
+                        <div class="camera-controls">
+                            <button id="torchBtn" class="cam-btn" title="Фонарик">🔦</button>
+                            <button id="uploadBtn" class="cam-btn" title="Загрузить фото">🖼️</button>
+                            <input type="file" id="fileInput" accept="image/*" style="display:none;">
+                        </div>
                     </div>
-                    <button id="captureBtn" class="btn btn-primary capture-btn">📸 Сделать снимок</button>
                 </div>
-                <div id="ocrStatus" class="ocr-status">Наведите камеру на ценник</div>
+                <button id="captureBtn" class="btn btn-primary capture-btn">📸 Сделать снимок</button>
+                <div id="ocrStatus" class="ocr-status">📷 Наведите на ценник или выберите фото</div>
                 <button id="startCameraBtn" class="btn btn-primary">📷 Включить камеру</button>
+                <button id="scanBarcodeBtn" class="btn btn-secondary" style="display:none;">📊 Искать по штрихкоду</button>
             </div>
         </section>
 
@@ -82,7 +88,7 @@
         <section id="voiceTab" class="tab-content">
             <div class="card">
                 <button id="voiceBtn" class="btn btn-primary voice-btn">🎙️ Начать запись</button>
-                <div id="voiceStatus" class="voice-status">Нажмите кнопку и скажите: "Молоко 150 рублей 500 грамм"</div>
+                <div id="voiceStatus" class="voice-status">Скажите: "Название, цена, вес"</div>
                 <div id="voiceResult" class="voice-result"></div>
             </div>
         </section>
@@ -189,6 +195,7 @@
 
     <!-- Подключаем библиотеки -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
 
     <!-- Наш скрипт -->
     <script src="script.js"></script>
