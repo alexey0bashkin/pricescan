@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="docs/screenshots/main.png" alt="PriceScan Logo" width="120">
   <h1>🛒 PriceScan</h1>
   <p><strong>Умный калькулятор цены за грамм с OCR и бюджетом</strong></p>
   
